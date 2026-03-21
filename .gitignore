@@ -1,0 +1,34 @@
+# Binaries
+ace-server/ace-server
+registry/registry
+agent-buyer/buyer
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+vendor/
+*.test
+*.out
+go.sum
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Build
+bin/
+dist/
