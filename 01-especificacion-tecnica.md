@@ -1,376 +1,213 @@
-# Tienda Agent‑Native (TAN) — Especificación Técnica (CloudCode‑Ready)
+# ANS — Technical Specification
 
-**Fecha:** 2026-02-22  
-**Objetivo:** especificación completa para implementar por fases, con arquitectura y APIs.
-
----
-
-## 0) Alcance y supuestos
-
-### Alcance
-- Plataforma multi‑tenant para crear/operar tiendas.
-- Storefront web (humano) + ACE (Agent Commerce Endpoint) (máquina).
-- Capa agent‑native: permisos, límites, approvals, auditoría y observabilidad.
-- Roadmap por MVPs: Catálogo/Stock → Órdenes → Optimización → Discovery (Registry).
-
-### Fuera de alcance inicial (pero considerado)
-- Marketplace de agentes/módulos (puede venir después).
-- Motor de ads completo; se integrará por conectores.
-- Pagos propios (se integra con PSP / wallet).
-
-### Supuestos de stack (editables)
-- CloudCode como capa de backend/logic.
-- Auth: OIDC/JWT, OAuth2 para conectores.
-- Persistencia: Postgres (core), Redis (colas/caché), Object Storage (imágenes, logs).
-- Eventing: cola (SQS/PubSub/Kafka según infra) para workflows.
+**Date:** 2026-03-08
+**Previous name:** TAN (Tienda Agent-Native)
 
 ---
 
-## 1) Conceptos clave
+## 0) Scope & Assumptions
 
-### 1.1 Entidades principales
-- **Tenant**: cuenta (merchant/empresa).
-- **Store**: tienda dentro de un tenant.
-- **AgentPrincipal**: identidad de agente (client credentials).
-- **HumanUser**: usuario humano.
-- **Product / Variant**
-- **InventoryItem**
-- **Order / Fulfillment / Return**
-- **Policy**: reglas y permisos.
-- **ApprovalRequest**: solicitud para ejecutar una acción sensible.
-- **AuditLog**: log inmutable de acciones.
-- **Connector**: integración externa (envíos, pagos, CRM, etc.)
-- **Budget**: límites de gasto y rate limits por agente/tenant/store.
+### Scope
+- Open ACE (Agent Commerce Exchange) protocol specification
+- Registry service for store discovery and health monitoring
+- Reference ACE server implementation (Go)
+- Trust layer: policies, approvals, audit logging
+- Demo buyer agent for E2E validation
 
-### 1.2 Clases de acción (para policies)
-- **Read**: leer catálogo, órdenes, métricas
-- **Write‑Low**: editar descripción, tags, imágenes, stock dentro de rango
-- **Write‑High**: publicar producto, cambios grandes de precio, reembolsos
-- **Money‑Move**: capturar pagos, reembolsar, comprar ads
+### Out of Scope (for now)
+- Human storefront / UI
+- MCP Adapter (Phase 2 — premium)
+- Managed hosting (Phase 3 — premium)
+- ML-based anomaly detection (Phase 3)
+
+### Stack
+- **Language:** Go (stdlib net/http)
+- **Database:** PostgreSQL (production), in-memory (MVP)
+- **Payments:** Payment-agnostic — stores declare supported protocols via `payment_protocols` in `.well-known/agent-commerce`. Reference adapters provided for x402 (Coinbase) and MPP (Tempo + Stripe). Stripe and MercadoPago supported as legacy/fallback adapters.
+- **Hosting:** AWS (ECS/Lambda) or GCP (Cloud Run)
+- **CI/CD:** GitHub Actions
+- **Protocol spec:** Markdown + OpenAPI
 
 ---
 
-## 2) Arquitectura (alto nivel)
+## 1) Architecture
 
-```mermaid
-flowchart LR
-  subgraph Users
-    H[Humano: merchant/ops]
-    A[Agente autónomo]
-    B[Agente comprador externo]
-  end
+```
+┌─────────────────────────────────────────────────────┐
+│                    OPEN SOURCE                       │
+│                                                      │
+│  ┌──────────────┐    ┌──────────────────────────┐   │
+│  │  ACE Spec    │    │  Reference Implementation │   │
+│  │  (Protocol)  │    │  (Go backend + demo store)│   │
+│  └──────────────┘    └──────────────────────────┘   │
+│                                                      │
+│  ┌──────────────────────────────────────────────┐   │
+│  │  Registry (self-hostable)                     │   │
+│  │  - Store registration + indexing              │   │
+│  │  - Agent search/discovery                     │   │
+│  │  - Health checks on ACE endpoints             │   │
+│  └──────────────────────────────────────────────┘   │
+│                                                      │
+│  ┌──────────────────────────────────────────────┐   │
+│  │  Trust Layer v0                               │   │
+│  │  - Policies (ALLOW/DENY/APPROVAL)             │   │
+│  │  - Audit log (immutable)                      │   │
+│  │  - Budget limits per agent                    │   │
+│  └──────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────┘
 
-  subgraph TAN[Plataforma Tienda Agent‑Native]
-    W[Web Storefront + Admin UI]
-    API[Core API Gateway]
-    ACE[Agent Commerce Endpoint]
-    POL[Policy Engine + Approvals]
-    ORCH[Orchestrator / Workflows]
-    AUD[Audit Log Service]
-    OBS[Observability (metrics/traces)]
-    CAT[Catalog Service]
-    ORD[Order Service]
-    INV[Inventory Service]
-    PAY[Payments Adapter]
-    SHIP[Shipping Adapter]
-    REG[Registry (fase 2)]
-  end
-
-  subgraph External
-    PSP[PSP / Wallet]
-    CARR[Carriers/Logística]
-    IDX[Indexers / Search]
-  end
-
-  H --> W --> API
-  A --> API
-  B --> ACE --> API
-
-  API --> CAT
-  API --> INV
-  API --> ORD
-  API --> POL
-  API --> AUD
-  API --> ORCH
-  ORCH --> PAY --> PSP
-  ORCH --> SHIP --> CARR
-  OBS --- API
-  OBS --- ORCH
-
-  REG --> IDX
-  ACE --> REG
+┌─────────────────────────────────────────────────────┐
+│                    PREMIUM (ANS Cloud)                │
+│                                                      │
+│  - Managed registry with verification & reputation   │
+│  - MCP Adapter (expose ACE stores as MCP servers)    │
+│  - Managed hosting for ACE endpoints                 │
+│  - Advanced policies + ML anomaly detection          │
+│  - Analytics dashboard                               │
+│  - SLA guarantees                                    │
+└─────────────────────────────────────────────────────┘
 ```
 
-### 2.1 Principio operativo
-1) Toda acción mutante pasa por **Policy Engine**.
-2) Si requiere aprobación, se crea **ApprovalRequest** y se detiene la ejecución.
-3) Cuando se aprueba, el Orchestrator continúa.
-4) Todo queda registrado en **AuditLog** y métricas en **OBS**.
+### Components
+
+| Component | Description | Location |
+|-----------|-------------|----------|
+| ACE Spec | Protocol specification (markdown) | `ace-spec/` |
+| Registry | Store discovery + health checks (Go) | `registry/` |
+| ACE Server | Reference store implementation (Go) | `ace-server/` |
+| Agent Buyer | Demo CLI buyer agent (Go) | `agent-buyer/` |
+| Shared | Common types and helpers | `shared/` |
 
 ---
 
-## 3) Agent Commerce Endpoint (ACE)
+## 2) ACE Protocol Summary
 
-### 3.1 Descubrimiento (well‑known)
-- URL: `https://<store-domain>/.well-known/agent-commerce`
-- Método: `GET`
-- Respuesta: JSON con capacidades, endpoints y políticas públicas.
+### Discovery
+Every ACE store exposes `GET /.well-known/agent-commerce` returning:
+- Store ID, name, version
+- ACE base URL
+- Capabilities (catalog, cart, orders, payments)
+- Auth configuration
+- Supported currencies
+- Public policies
+- **`payment_protocols`**: list of supported payment standards (e.g. `["x402", "mpp", "stripe"]`). Agents use this to select the payment method they support. ACE does not mandate a specific protocol.
 
-Ejemplo mínimo:
+### Authentication (v0.1)
+- API Keys via `X-ACE-Key` header
+- Keys issued by store owner to buyer agents
+- Future: OAuth2, federation
 
+### Buyer API (public, /ace/v1/)
+Full purchase flow:
+- Product discovery and search
+- Shipping quotes
+- Cart management
+- Order creation
+- Payment initiation — protocol-agnostic; client specifies `protocol` (x402 | mpp | stripe | mercadopago); server responds with the appropriate challenge/instructions for that protocol
+
+### Seller Admin API (private, /api/v1/)
+Store management:
+- Catalog CRUD + publish/unpublish
+- Inventory management
+- Order fulfillment and refunds
+- Policy configuration
+- Approval workflows
+- Audit log queries
+- API key management
+
+See `ace-spec/README.md` for full protocol specification.
+
+---
+
+## 3) Trust Layer
+
+### Policy Engine
+- Configurable per-store rules
+- Action-based: each operation type has a policy (allow/deny/approval)
+- Default: agents need approval for `product.publish` and `order.refund`
+- Humans can bypass policies; agents cannot
+
+### Audit Log
+- Immutable append-only log
+- Correlation IDs for tracing
+- Records: actor, action, resource, timestamp, details
+- Actor types: human, agent
+
+### Approvals
+- Human-in-the-loop for sensitive actions
+- Pending queue with approve/reject workflow
+- Triggered automatically by policy engine
+
+---
+
+## 4) Data Model (in-memory for MVP)
+
+### Core Entities
+- **Product**: id, name, description, price, variants, status (draft/published/unpublished)
+- **Variant**: id, name, SKU, price, inventory, attributes
+- **Cart**: id, items, total
+- **Order**: id, cart_id, items, total, status (pending/paid/fulfilled/refunded/cancelled)
+- **Payment**: id, order_id, status, provider, amount, external_id
+
+### Trust Entities
+- **Policy**: id, action, effect (allow/deny/approval)
+- **Approval**: id, action, resource, status (pending/approved/rejected)
+- **AuditEntry**: id, store_id, action, actor, actor_type, resource, correlation_id, timestamp
+
+### Registry Entities
+- **StoreEntry**: id, well_known_url, name, categories, country, currencies, capabilities, health_status
+
+---
+
+## 5) Auth Model
+
+| Actor | Auth Method | Policy Bypass |
+|-------|------------|---------------|
+| Human admin | JWT (email/password or OAuth) | Yes |
+| Seller agent | API key with scoped permissions | No (goes through policy engine) |
+| Buyer agent | API key via X-ACE-Key header | N/A (read + purchase only) |
+
+---
+
+## 6) Error Handling
+
+Standard error format across all APIs:
 ```json
 {
-  "store_id": "st_123",
-  "version": "1.0",
-  "ace_base_url": "https://<store-domain>/ace/v1",
-  "catalog_endpoint": "/products",
-  "quote_endpoint": "/shipping/quote",
-  "cart_endpoint": "/cart",
-  "order_endpoint": "/orders",
-  "auth": {
-    "type": "oauth2_client_credentials",
-    "token_url": "https://<store-domain>/oauth/token",
-    "scopes": ["catalog.read", "order.create"]
-  },
-  "policies_public": {
-    "max_qty_per_order": 5,
-    "supported_currencies": ["ARS", "USD"]
-  }
+  "error": "human-readable message",
+  "code": "MACHINE_CODE",
+  "details": "optional extra info"
 }
 ```
 
-### 3.2 Estándar ACE v1 (recursos)
-- `GET /ace/v1/products` (paginado, filtros)
-- `GET /ace/v1/products/<built-in function id>`
-- `POST /ace/v1/shipping/quote`
-- `POST /ace/v1/cart` (crear carrito)
-- `POST /ace/v1/cart/<built-in function id>/items` (agregar items)
-- `POST /ace/v1/orders` (crear orden)
-- `GET /ace/v1/orders/<built-in function id>`
-- `POST /ace/v1/orders/<built-in function id>/pay` (pago directo o iniciar approval)
-- `GET /ace/v1/approvals/<built-in function id>`
-
-> Nota: para MVP, puede bastar con productos + crear orden + approval.
+Codes: NOT_FOUND, INVALID_REQUEST, UNAUTHORIZED, OUT_OF_STOCK, PAYMENT_FAILED, POLICY_DENIED, APPROVAL_REQUIRED, INTERNAL_ERROR
 
 ---
 
-## 4) Seguridad, identidad y permisos
+## 7) Payment Protocol Support
 
-### 4.1 Identidad
-- Humanos: OIDC (login) → JWT.
-- Agentes: OAuth2 Client Credentials (client_id/client_secret) + scopes.
-- Agentes externos: se tratan como “apps” con scopes limitados.
+ACE is payment-agnostic. Each store declares which protocols it accepts in `.well-known/agent-commerce`. The payment step in the buyer flow works as follows:
 
-### 4.2 Scopes sugeridos
-- `catalog.read`, `catalog.write`
-- `inventory.read`, `inventory.write`
-- `orders.read`, `orders.write`
-- `orders.refund` (alto riesgo)
-- `pricing.write_limited` (con límites)
-- `admin.policy.manage`
+1. Agent reads `payment_protocols` from `.well-known/agent-commerce`
+2. Agent selects a protocol it supports
+3. Agent calls `POST /ace/v1/orders/{id}/pay` with `{ "protocol": "x402" | "mpp" | "stripe" | ... }`
+4. ACE server responds with protocol-specific instructions:
 
-### 4.3 Policy Engine (modelo)
-Reglas por:
-- acción (tipo)
-- recursos (producto, categoría, store)
-- rango permitido (ej: precio ±5%)
-- condiciones (ej: sólo si stock>0)
-- rol del principal (agente/humano)
-- presupuesto/cupo
+| Protocol | ACE server response |
+|----------|-------------------|
+| **x402** | Returns `{ "type": "x402", "payment_url": "...", "amount": ..., "currency": ... }` — agent submits payment on-chain and retries with `X-PAYMENT` header |
+| **mpp** | Returns `{ "type": "mpp", "session_endpoint": "...", "amount": ..., "currency": ... }` — agent opens MPP session and streams micropayments |
+| **stripe** | Returns `{ "type": "stripe", "client_secret": "...", "amount": ..., "currency": ... }` — legacy flow for human-assisted or card payments |
+| **mercadopago** | Returns `{ "type": "mercadopago", "init_point": "...", "amount": ..., "currency": ... }` — legacy flow for LATAM |
 
-**Evaluación**:
-- `ALLOW`
-- `DENY`
-- `REQUIRE_APPROVAL` (con template de aprobación)
+Reference adapters for x402 and MPP are provided in `ace-server/payment/`. Adding new protocol adapters requires implementing the `PaymentAdapter` interface.
 
 ---
 
-## 5) Auditoría y observabilidad
+## 8) Testing Strategy
 
-### 5.1 Auditoría (inmutable)
-Cada acción mutante genera un `AuditLog` con:
-- actor (agente/humano)
-- intención (por qué)
-- diff (antes/después)
-- request_id, correlation_id
-- policy_decision
-- timestamps
-- firma (opcional) / hash encadenado
-
-```mermaid
-sequenceDiagram
-  participant Agent
-  participant API
-  participant Policy
-  participant Service
-  participant Audit
-
-  Agent->>API: PATCH /products/123 (price=...)
-  API->>Policy: evaluate(action=pricing.update, delta=+3%)
-  Policy-->>API: REQUIRE_APPROVAL
-  API->>Audit: write(action_attempt + decision)
-  API-->>Agent: 202 Accepted + approval_id
-```
-
-### 5.2 Observabilidad (MVP)
-- métricas por store/agent: tareas, éxito/error, latencia
-- costo estimado por tarea (si aplica)
-- alertas: loops, spikes de costo, spikes de fallas
-
----
-
-## 6) Modelo de datos (esqueleto)
-
-> Nombres ilustrativos. Ajustar a ORM/DB.
-
-- `tenants(id, name, plan, status)`
-- `stores(id, tenant_id, domain, currency, timezone, status)`
-- `agents(id, tenant_id, name, client_id, hashed_secret, status)`
-- `policies(id, tenant_id, store_id, json_rules, version, status)`
-- `products(id, store_id, title, description, status, ...)`
-- `variants(id, product_id, sku, price, currency, attributes_json, ...)`
-- `inventory(id, variant_id, on_hand, reserved, updated_at)`
-- `orders(id, store_id, buyer_json, status, totals_json, ...)`
-- `order_items(id, order_id, variant_id, qty, unit_price, ...)`
-- `approvals(id, store_id, requested_by, action, payload_json, status, ...)`
-- `audit_logs(id, store_id, actor, action, before_json, after_json, decision, ...)`
-- `budgets(id, scope, limit_json, usage_json, period, ...)`
-
----
-
-## 7) Desarrollo por fases (MVPs)
-
-### Fase 0 — Fundaciones (2–4 semanas)
-- Multi‑tenant + auth humano/agente
-- Core services: catalog, inventory, orders (skeleton)
-- Policy Engine v0 (ALLOW/DENY/APPROVAL)
-- AuditLog v0
-- ACE well‑known + `GET /products`
-
-**Exit criteria:**
-- un agente autenticado puede leer catálogo y proponer cambios (sin ejecutar)
-
----
-
-### MVP 1 — Catálogo + Stock (4–8 semanas)
-**Objetivo:** que agentes puedan operar el “backoffice” con bajo riesgo.
-
-Features:
-- CRUD de productos/variantes (con policies)
-- subida de imágenes (presigned URLs)
-- edición masiva (bulk) con validaciones
-- inventario: actualizar stock con límites/reglas
-- publicación/despublicación con approval
-
-Diagrama (flujo publicación):
-
-```mermaid
-sequenceDiagram
-  participant Agent
-  participant API
-  participant Policy
-  participant Catalog
-  participant Approval
-  participant Audit
-
-  Agent->>API: POST /products (draft)
-  API->>Policy: evaluate(catalog.create)
-  Policy-->>API: ALLOW
-  API->>Catalog: create draft product
-  API->>Audit: log create
-  API-->>Agent: 201 Created
-
-  Agent->>API: POST /products/<built-in function id>/publish
-  API->>Policy: evaluate(catalog.publish)
-  Policy-->>API: REQUIRE_APPROVAL
-  API->>Approval: create approval request
-  API->>Audit: log approval required
-  API-->>Agent: 202 Accepted (approval_id)
-```
-
-**Exit criteria:**
-- agente puede cargar 100 productos y mantener stock con errores <X%
-- acciones riesgosas requieren aprobación
-
----
-
-### MVP 2 — Órdenes + Comunicación (6–10 semanas)
-Features:
-- creación/gestión de órdenes
-- estados de fulfillment
-- integración shipping adapter (mínima)
-- atención al cliente: plantillas + respuestas sugeridas
-- devoluciones con límites (approval por defecto)
-
-**Exit criteria:**
-- agente puede procesar órdenes end‑to‑end en sandbox + en prod con approvals
-
----
-
-### MVP 3 — Optimización controlada (6–12 semanas)
-Features:
-- repricing con bandas (±X%)
-- promos sugeridas con approval
-- alertas por stock y recomendaciones de reposición
-- integración ads adapter (solo “proponer” en v1)
-
-**Exit criteria:**
-- mejoras medibles en conversión/margen sin aumentar incidentes
-
----
-
-### MVP 4 — Discovery (Registry) (4–8 semanas)
-Features:
-- registro de tienda (verificación)
-- health checks del ACE endpoint
-- búsqueda por categoría/país/moneda
-- reputación/señales básicas
-
-```mermaid
-flowchart TB
-  Store[Store publishes well-known ACE] --> Registry[Registry records store + endpoints]
-  Registry --> AgentBuyer[Agent buyer searches registry]
-  AgentBuyer --> ACE[Calls ACE endpoints to buy]
-```
-
----
-
-## 8) Conectores (Adapters)
-
-Diseño: interfaz estable + implementaciones por proveedor.
-
-- `PaymentsAdapter`: authorize/capture/refund
-- `ShippingAdapter`: quote/create_label/track
-- `MessagingAdapter`: email/whatsapp/chat (si aplica)
-- `ERPAdapter`: sync stock/prices (opcional)
-
-Cada adapter:
-- credenciales en vault/secret manager
-- scopes y policies por conector
-- retries + idempotency keys
-
----
-
-## 9) Idempotencia y consistencia
-
-- Todas las operaciones mutantes aceptan `Idempotency-Key`.
-- Órdenes y pagos: transacciones con estados (pending → authorized → captured).
-- Eventos async para fulfillment y tracking.
-
----
-
-## 10) Plan de testing (mínimo viable)
-
-- Unit: policy evaluation, validation.
-- Contract tests: ACE endpoints.
-- E2E sandbox: “create product → publish approval → order → pay approval → fulfill”.
-- Chaos: fallas de conector (shipping/payments) con retries y circuit breaker.
-
----
-
-## 11) Checklist de entrega por fase
-
-- endpoints documentados (OpenAPI)
-- dashboards de métricas
-- auditoría consultable
-- runbooks de incidentes (loops, gasto, fraude)
+- **Protocol compliance**: demo buyer agent runs full E2E flow
+- **Registry**: register → search → health check
+- **Trust layer**: attempt action exceeding policy → verify denial/approval
+- **Payment protocols**: E2E test with x402 adapter (testnet) and MPP adapter (dry-run mode)
+- **Future**: MCP adapter test with Claude

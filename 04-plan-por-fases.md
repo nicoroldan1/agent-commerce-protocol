@@ -1,105 +1,90 @@
-# TAN — Plan de desarrollo por fases (detallado)
+# ANS — Development Phases
 
-**Fecha:** 2026-02-22
-
----
-
-## Visión
-Una plataforma donde agentes crean y operan tiendas con seguridad, y otros agentes pueden encontrarlas y comprar.
+**Date:** 2026-03-08
 
 ---
 
-## Fase 0: Fundaciones (Sprint 1–2)
+## Phase 0: Protocol + Registry Foundation (current)
 
-### Entregables
-- Multi‑tenant + stores
-- Auth humano/agente (client credentials)
-- Policy Engine v0 (ALLOW/DENY/APPROVAL)
-- AuditLog v0
-- ACE discovery + catálogo read‑only
+**Goal:** ACE spec published, registry functional, 1-2 demo stores running.
 
-### Riesgos a atacar
-- modelado de permisos
-- trazabilidad
-- idempotencia base
+### Deliverables
+- ACE Protocol Spec document (markdown) — including `payment_protocols` field in `.well-known/agent-commerce`
+- Registry Service (Go) — registration, search, health checks
+- ACE Reference Server (Go) — full buyer + seller admin API with payment-agnostic `/pay` endpoint
+- Demo Agent Buyer (Go) — E2E purchase flow proof
+- Shared types package
+- `PaymentAdapter` interface defined (x402, mpp, stripe, mercadopago)
 
----
+### Exit Criteria
+- Demo buyer agent discovers store → browses catalog → creates order → pays
+- Registry can register and search stores by payment protocol
+- Policy engine blocks sensitive agent actions without approval
+- `.well-known/agent-commerce` returns `payment_protocols`
 
-## MVP 1: Catálogo + Stock (Sprint 3–6)
-
-### Features
-- Productos/variantes
-- Bulk operations
-- Imágenes
-- Inventario
-- Publicación con approvals
-
-### Arquitectura específica
-```mermaid
-flowchart LR
-  Agent --> API --> Policy
-  Policy -->|allow| Catalog
-  Policy -->|approval| Approvals
-  Catalog --> Audit
-  Approvals --> Audit
-```
-
-### Calidad
-- validación de atributos
-- pruebas e2e de bulk
-- rate limits de escritura
+### Status: ✅ Implemented (payment_protocols field pending)
 
 ---
 
-## MVP 2: Órdenes + Post‑venta (Sprint 7–12)
+## Phase 1: Trust Layer + Payment Protocol Adapters
 
-### Features
-- órdenes, estados, fulfillment
-- shipping adapter mínimo (quote + label)
-- devoluciones con approval
-- comunicaciones (plantillas)
+**Goal:** Production-grade trust and safety + reference payment integrations.
 
-### Calidad
-- idempotencia fuerte en pagos/fulfillment
-- circuit breaker en conectores
+### Deliverables
+- Policy engine with configurable rules per store
+- Approval workflow (human-in-the-loop for sensitive actions)
+- Immutable audit log with correlation IDs
+- Budget/rate limits per agent
+- Store verification in registry
+- PostgreSQL persistence (replace in-memory stores)
+- **x402 payment adapter** — reference implementation for on-chain micropayments
+- **MPP payment adapter** — reference implementation for session-based streaming payments
+- Registry search filterable by `payment_protocols`
 
----
-
-## MVP 3: Optimización (Sprint 13–18)
-
-### Features
-- repricing con bandas
-- promos sugeridas
-- alertas stock / recomendaciones
-- ads “proponer” + approval
-
-### Calidad
-- simulación / impacto estimado
-- rollback seguro
+### Exit Criteria
+- Configurable policies per store
+- Budget limits enforced
+- Audit log queryable and immutable
+- Agent can complete E2E purchase using x402 adapter on testnet
 
 ---
 
-## MVP 4: Discovery (Registry) (Sprint 19–22)
+## Phase 2: MCP Adapter (Premium)
 
-### Features
-- registry de tiendas
-- verificación
-- health checks ACE
-- búsqueda + filtros
-- señales de reputación básicas
+**Goal:** AI agents can interact with stores natively.
 
----
+### Deliverables
+- MCP server wrapper that exposes any ACE store as tools
+- Agent (Claude, etc.) can "connect" to a store and operate natively
+- Tool definitions for: browse catalog, add to cart, place order, pay
 
-## MVP 5 (opcional): Ecosistema
-- feeds abiertos
-- indexadores externos
-- ranking
-- marketplace de conectores/módulos
+### Exit Criteria
+- Claude can complete a purchase via MCP tools connected to an ACE store
 
 ---
 
-## Dependencias y decisiones abiertas
-- ¿dominio propio por store o subdominio?
-- ¿PSP/wallet elegido?
-- ¿logística propia vs integradores?
-- ¿nivel enterprise de auditoría (WORM, hash chain)?
+## Phase 3: Managed Platform (ANS Cloud)
+
+**Goal:** Full commercial offering.
+
+### Deliverables
+- Hosted ACE endpoints (seller doesn't need infrastructure)
+- Managed registry with reputation scoring
+- Analytics dashboard
+- Advanced ML-based anomaly detection
+- SLA guarantees
+
+### Exit Criteria
+- Paying customers on managed platform
+- 99.9% uptime SLA met
+
+---
+
+## Dependencies & Open Decisions
+
+- ~~Payment processor integration~~ — resuelto: ACE es payment-agnostic. x402 y MPP son los protocolos primarios; Stripe/MercadoPago como adapters legacy opcionales.
+- Cloud provider (AWS vs GCP) for managed platform
+- Domain strategy (custom domains vs subdomains)
+- Federation model for multi-registry
+- x402 testnet vs mainnet for Phase 1 adapter (Base/USDC — Coinbase ecosystem)
+- MPP integration requires Tempo account or Stripe MPP preview API (`2026-03-04.preview`)
