@@ -82,7 +82,7 @@
 
 ## Dependencies & Open Decisions
 
-- ~~Payment processor integration~~ — resuelto: ACE es payment-agnostic. x402 y MPP son los protocolos primarios; Stripe/MercadoPago como adapters legacy opcionales.
+- ~~Payment processor integration~~ — resolved: ACE is payment-agnostic. x402 and MPP are the primary protocols; Stripe/MercadoPago are supported as optional legacy adapters.
 - Cloud provider (AWS vs GCP) for managed platform
 - Domain strategy (custom domains vs subdomains)
 - Federation model for multi-registry

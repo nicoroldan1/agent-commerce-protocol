@@ -1,73 +1,73 @@
-# TAN — Seguridad, Gobernanza y Riesgo
+# ANS — Security, Governance & Risk
 
-**Fecha:** 2026-02-22
-
----
-
-## 1) Principios
-
-- **Default seguro**: acciones riesgosas requieren aprobación
-- **Least privilege**: scopes mínimos
-- **Auditoría inmutable**: logs consultables y exportables
-- **Defensa en profundidad**: auth + policy + budget + anomaly detection
-- **Reversibilidad**: rollback y compensaciones
+**Date:** 2026-02-22
 
 ---
 
-## 2) Matriz de riesgo por acción (ejemplo)
+## 1) Principles
 
-| Acción | Riesgo | Default | Mitigación |
+- **Secure by default**: risky actions require explicit approval
+- **Least privilege**: minimal scopes per agent
+- **Immutable audit trail**: logs are queryable and exportable
+- **Defense in depth**: auth + policy + budget + anomaly detection
+- **Reversibility**: rollback and compensating transactions
+
+---
+
+## 2) Risk Matrix by Action (examples)
+
+| Action | Risk | Default | Mitigation |
 |---|---:|---|---|
-| Editar descripción | Bajo | ALLOW | validaciones |
-| Subir imágenes | Bajo | ALLOW | antivirus/scan + size limits |
-| Ajustar stock | Medio | ALLOW con límites | límites por SKU + rate limit |
-| Publicar producto | Medio | APPROVAL | checklist + preview |
-| Cambiar precio | Alto | APPROVAL o ALLOW limitado | bandas ±X%, alertas |
-| Reembolso | Alto | APPROVAL | tope por monto + doble aprobación |
-| Gastos en ads | Alto | APPROVAL | budget + whitelists |
+| Edit description | Low | ALLOW | input validation |
+| Upload images | Low | ALLOW | antivirus/scan + size limits |
+| Adjust inventory | Medium | ALLOW with limits | per-SKU limits + rate limit |
+| Publish product | Medium | APPROVAL | checklist + preview |
+| Change price | High | APPROVAL or limited ALLOW | ±X% bands, alerts |
+| Issue refund | High | APPROVAL | amount cap + double approval |
+| Ad spend | High | APPROVAL | budget + whitelists |
 
 ---
 
-## 3) Approvals (Human‑in‑the‑loop)
+## 3) Approvals (Human-in-the-loop)
 
-### 3.1 Tipos
-- **Manual**: humano aprueba en UI
-- **Policy‑auto**: reglas aprueban si cumple condiciones (ej: delta<2%)
-- **Multi‑sig**: requiere 2 aprobaciones (refund alto)
+### 3.1 Types
+- **Manual**: human approves via UI
+- **Policy-auto**: rules auto-approve if conditions are met (e.g., delta < 2%)
+- **Multi-sig**: requires 2 approvals (high-value refunds)
 
-### 3.2 Datos mínimos en una aprobación
+### 3.2 Minimum data in an approval request
 - actor
-- acción y payload
-- impacto estimado (ej: delta de margen)
-- recomendación del agente
-- evidencia (inputs/links)
+- action and payload
+- estimated impact (e.g., margin delta)
+- agent's recommendation
+- evidence (inputs / links)
 
 ---
 
-## 4) Presupuestos y rate limits
+## 4) Budgets and Rate Limits
 
-- Presupuesto por:
+- Budget scoped by:
   - store
-  - agente
-  - conector (ads/pagos)
-- Rate limits por endpoint y por acción
-- Alertas por:
-  - spikes (x3 baseline)
-  - loops (misma acción repetida)
-  - fallos repetidos de conector
+  - agent
+  - connector (ads / payments)
+- Rate limits per endpoint and per action type
+- Alerts triggered by:
+  - spikes (3× baseline)
+  - loops (same action repeated in a short window)
+  - repeated connector failures
 
 ---
 
-## 5) Auditoría y pruebas forenses
+## 5) Audit Trail and Forensics
 
-- Logs encadenados por hash (opcional)
-- Export a storage (WORM) para Enterprise
-- Correlation IDs end‑to‑end
+- Hash-chained log entries (optional, for tamper-evidence)
+- Export to WORM storage for Enterprise tier
+- Correlation IDs end-to-end across all services
 
 ---
 
-## 6) Cumplimiento y privacidad
+## 6) Compliance and Privacy
 
-- PII: encriptación en reposo, masking en logs
-- Retención configurable (ej: 30/90/365 días)
-- Acceso por RBAC (roles)
+- PII: encrypted at rest, masked in logs
+- Configurable retention (e.g., 30 / 90 / 365 days)
+- Access control via RBAC (role-based)
