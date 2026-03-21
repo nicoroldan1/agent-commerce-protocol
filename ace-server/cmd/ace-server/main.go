@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log"
 	"net/http"
@@ -22,7 +24,7 @@ func main() {
 	port := envOrDefault("PORT", "8081")
 	storeID := envOrDefault("STORE_ID", "store_demo_001")
 	storeName := envOrDefault("STORE_NAME", "ACE Demo Store")
-	adminToken := envOrDefault("ADMIN_TOKEN", "admin-secret-token")
+	adminToken := envOrDefault("ADMIN_TOKEN", generateSecureToken())
 	baseURL := envOrDefault("BASE_URL", fmt.Sprintf("http://localhost:%s", port))
 
 	// Initialize stores and services
@@ -124,6 +126,14 @@ func envOrDefault(key, def string) string {
 	return def
 }
 
+func generateSecureToken() string {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		log.Fatalf("Failed to generate secure token: %v", err)
+	}
+	return hex.EncodeToString(b)
+}
+
 func seedDemoData(s *store.MemoryStore, storeID string) string {
 	products := []ace.Product{
 		{
@@ -200,9 +210,17 @@ func seedDemoData(s *store.MemoryStore, storeID string) string {
 		s.CreateProduct(&products[i])
 	}
 
-	// Create demo API key
-	demoKey := "ace_demo_key_2024_abcdef1234567890"
-	s.CreateAPIKeyWithValue("demo-agent", []string{"catalog:read", "cart:write", "orders:write", "payments:write"}, demoKey)
+	// Create demo API key (generated at startup, never hardcoded)
+	demoKeyValue := envOrDefault("DEMO_API_KEY", "")
+	var resp ace.CreateAPIKeyResponse
+	var demoKey string
+	if demoKeyValue != "" {
+		resp = s.CreateAPIKeyWithValue("demo-agent", []string{"catalog:read", "cart:write", "orders:write", "payments:write"}, demoKeyValue)
+		demoKey = demoKeyValue
+	} else {
+		resp, demoKey = s.CreateAPIKey("demo-agent", []string{"catalog:read", "cart:write", "orders:write", "payments:write"})
+	}
+	_ = resp
 
 	_ = storeID
 	return demoKey

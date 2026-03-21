@@ -60,14 +60,16 @@ go run ./cmd/ace-server
 ```
 ACE Reference Server starting on :8081
 Store: ACE Demo Store (store_demo_001)
-Admin token: admin-secret-token
-Demo API key: ace_demo_key_2024_abcdef1234567890
+Admin token: a1b2c3d4...  (auto-generated, copy from terminal)
+Demo API key: e5f6a7b8...  (auto-generated, copy from terminal)
 Discovery: http://localhost:8081/.well-known/agent-commerce
 ```
 
 **Default port:** `8081`
 
 The server starts with 7 pre-seeded products (headphones, coffee, keyboard, shoes, books, yoga mat, water bottle) and a ready-to-use API key.
+
+**Important:** Both the admin token and demo API key are **generated randomly at each startup** and printed to the terminal. Copy them from the output to use in your requests. You can also set them explicitly via environment variables for reproducible setups.
 
 **Environment variables (all optional):**
 
@@ -76,7 +78,8 @@ The server starts with 7 pre-seeded products (headphones, coffee, keyboard, shoe
 | `PORT` | `8081` | Server port |
 | `STORE_ID` | `store_demo_001` | Store identifier |
 | `STORE_NAME` | `ACE Demo Store` | Store display name |
-| `ADMIN_TOKEN` | `admin-secret-token` | Admin API bearer token |
+| `ADMIN_TOKEN` | *(auto-generated)* | Admin API bearer token |
+| `DEMO_API_KEY` | *(auto-generated)* | Pre-seeded buyer API key |
 | `BASE_URL` | `http://localhost:8081` | Public base URL |
 
 ---
@@ -120,7 +123,7 @@ curl http://localhost:8081/.well-known/agent-commerce | jq .
 **Browse the catalog:**
 ```bash
 curl http://localhost:8081/ace/v1/products \
-  -H "X-ACE-Key: ace_demo_key_2024_abcdef1234567890" | jq .
+  -H "X-ACE-Key: <YOUR_DEMO_API_KEY>" | jq .
 ```
 
 ---
@@ -134,10 +137,10 @@ The demo agent is a Go CLI that simulates an autonomous buyer: discovers stores,
 cd agent-buyer
 
 # Option A: Agent discovers stores via the registry
-go run ./cmd/buyer --registry http://localhost:8080 --key ace_demo_key_2024_abcdef1234567890
+go run ./cmd/buyer --registry http://localhost:8080 --key <YOUR_DEMO_API_KEY>
 
 # Option B: Agent connects directly to a store (skip registry)
-go run ./cmd/buyer --store http://localhost:8081/.well-known/agent-commerce --key ace_demo_key_2024_abcdef1234567890
+go run ./cmd/buyer --store http://localhost:8081/.well-known/agent-commerce --key <YOUR_DEMO_API_KEY>
 ```
 
 Expected output:
@@ -202,14 +205,14 @@ curl http://localhost:8081/.well-known/agent-commerce
 
 ```bash
 curl "http://localhost:8081/ace/v1/products?q=keyboard" \
-  -H "X-ACE-Key: ace_demo_key_2024_abcdef1234567890"
+  -H "X-ACE-Key: <YOUR_DEMO_API_KEY>"
 ```
 
 ### Step 3 — Create cart
 
 ```bash
 curl -X POST http://localhost:8081/ace/v1/cart \
-  -H "X-ACE-Key: ace_demo_key_2024_abcdef1234567890" \
+  -H "X-ACE-Key: <YOUR_DEMO_API_KEY>" \
   -H "Content-Type: application/json"
 # → { "id": "cart_abc123", ... }
 ```
@@ -218,7 +221,7 @@ curl -X POST http://localhost:8081/ace/v1/cart \
 
 ```bash
 curl -X POST http://localhost:8081/ace/v1/cart/cart_abc123/items \
-  -H "X-ACE-Key: ace_demo_key_2024_abcdef1234567890" \
+  -H "X-ACE-Key: <YOUR_DEMO_API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{ "product_id": "PRODUCT_ID_HERE", "quantity": 1 }'
 ```
@@ -227,7 +230,7 @@ curl -X POST http://localhost:8081/ace/v1/cart/cart_abc123/items \
 
 ```bash
 curl -X POST http://localhost:8081/ace/v1/orders \
-  -H "X-ACE-Key: ace_demo_key_2024_abcdef1234567890" \
+  -H "X-ACE-Key: <YOUR_DEMO_API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{ "cart_id": "cart_abc123" }'
 # → { "id": "order_def456", "status": "pending", "total": { "amount": 14999, "currency": "USD" } }
@@ -237,7 +240,7 @@ curl -X POST http://localhost:8081/ace/v1/orders \
 
 ```bash
 curl -X POST http://localhost:8081/ace/v1/orders/order_def456/pay \
-  -H "X-ACE-Key: ace_demo_key_2024_abcdef1234567890" \
+  -H "X-ACE-Key: <YOUR_DEMO_API_KEY>" \
   -H "Content-Type: application/json" \
   -d '{ "protocol": "stripe" }'
 ```
@@ -246,7 +249,7 @@ curl -X POST http://localhost:8081/ace/v1/orders/order_def456/pay \
 
 ```bash
 curl http://localhost:8081/ace/v1/orders/order_def456/pay/status \
-  -H "X-ACE-Key: ace_demo_key_2024_abcdef1234567890"
+  -H "X-ACE-Key: <YOUR_DEMO_API_KEY>"
 ```
 
 ---
@@ -332,7 +335,7 @@ Give Claude the following tool definitions and it can autonomously complete purc
 You are a buyer agent. You can discover ACE-compatible stores and make purchases autonomously.
 
 The store URL is: http://localhost:8081/.well-known/agent-commerce
-Your API key is: ace_demo_key_2024_abcdef1234567890
+Your API key is: <YOUR_DEMO_API_KEY>
 
 When asked to buy something:
 1. Call discover_store to understand the store's capabilities
@@ -361,7 +364,7 @@ Paste the following into any LLM that supports tool/function calling:
 You have access to an ACE-compatible store.
 
 Base URL: http://localhost:8081/ace/v1
-API Key header: X-ACE-Key: ace_demo_key_2024_abcdef1234567890
+API Key header: X-ACE-Key: <YOUR_DEMO_API_KEY>
 Discovery: GET http://localhost:8081/.well-known/agent-commerce
 
 ACE protocol endpoints:
@@ -378,12 +381,12 @@ Task: Buy a coffee product for me.
 
 ## 9. Admin Operations
 
-Manage your store with the Admin API (requires `Authorization: Bearer admin-secret-token`):
+Manage your store with the Admin API (requires `Authorization: Bearer <YOUR_ADMIN_TOKEN>`):
 
 **Create a product:**
 ```bash
 curl -X POST http://localhost:8081/api/v1/stores/store_demo_001/products \
-  -H "Authorization: Bearer admin-secret-token" \
+  -H "Authorization: Bearer <YOUR_ADMIN_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "My Product",
@@ -395,7 +398,7 @@ curl -X POST http://localhost:8081/api/v1/stores/store_demo_001/products \
 **Issue an API key to a buyer agent:**
 ```bash
 curl -X POST http://localhost:8081/api/v1/stores/store_demo_001/api-keys \
-  -H "Authorization: Bearer admin-secret-token" \
+  -H "Authorization: Bearer <YOUR_ADMIN_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{
     "agent_name": "my-buyer-agent",
@@ -406,13 +409,13 @@ curl -X POST http://localhost:8081/api/v1/stores/store_demo_001/api-keys \
 **View audit trail:**
 ```bash
 curl http://localhost:8081/api/v1/stores/store_demo_001/audit-logs \
-  -H "Authorization: Bearer admin-secret-token" | jq .
+  -H "Authorization: Bearer <YOUR_ADMIN_TOKEN>" | jq .
 ```
 
 **Configure policies:**
 ```bash
 curl -X PUT http://localhost:8081/api/v1/stores/store_demo_001/policies \
-  -H "Authorization: Bearer admin-secret-token" \
+  -H "Authorization: Bearer <YOUR_ADMIN_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '[
     { "action": "order.refund", "effect": "approval" },
@@ -480,7 +483,7 @@ Any agent that queries the public registry will now be able to find and transact
 |---------|---------|
 | `connection refused :8080` | Registry is not running. Start it with `cd registry && go run ./cmd/registry` |
 | `connection refused :8081` | ACE server is not running. Start it with `cd ace-server && go run ./cmd/ace-server` |
-| `401 Unauthorized` | Check you're sending `X-ACE-Key: ace_demo_key_2024_abcdef1234567890` |
+| `401 Unauthorized` | Check you're sending `X-ACE-Key: <YOUR_DEMO_API_KEY>` |
 | `No stores found in registry` | Register the store first (step 4 above) |
 | `go: module not found` | Run from the repo root (where `go.work` is), not from a subdirectory |
 | Port already in use | Change port: `PORT=9090 go run ./cmd/ace-server` |
