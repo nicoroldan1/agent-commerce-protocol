@@ -181,6 +181,9 @@ Every action is logged immutably:
 
 ## Quick Start
 
+> **Full installation guide** → [GETTING_STARTED.md](GETTING_STARTED.md)
+> Covers: local setup, curl walkthrough, connecting Claude/GPT as a buyer agent, deploying your own store.
+
 ### Run the Reference Server
 
 ```bash
