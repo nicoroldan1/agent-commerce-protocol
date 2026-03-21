@@ -37,6 +37,7 @@
 - Budget/rate limits per agent
 - Store verification in registry
 - PostgreSQL persistence (replace in-memory stores)
+- **Admin auth upgrade** — replace static token with JWT (expiration + refresh) or OAuth2 client credentials. Support multiple admin users per store with scoped permissions and token rotation without server restart.
 - **x402 payment adapter** — reference implementation for on-chain micropayments
 - **MPP payment adapter** — reference implementation for session-based streaming payments
 - Registry search filterable by `payment_protocols`
@@ -46,6 +47,7 @@
 - Budget limits enforced
 - Audit log queryable and immutable
 - Agent can complete E2E purchase using x402 adapter on testnet
+- Admin auth supports token rotation without downtime
 
 ---
 
@@ -88,3 +90,4 @@
 - Federation model for multi-registry
 - x402 testnet vs mainnet for Phase 1 adapter (Base/USDC — Coinbase ecosystem)
 - MPP integration requires Tempo account or Stripe MPP preview API (`2026-03-04.preview`)
+- Admin auth model: JWT vs OAuth2 client credentials for Phase 1. Current MVP uses a single static token per store (generated at startup via `crypto/rand`). Phase 1 must support: multiple admins, scoped permissions, token rotation, and expiration.
