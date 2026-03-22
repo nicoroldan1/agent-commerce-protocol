@@ -254,3 +254,80 @@ type CreateAPIKeyResponse struct {
 	APIKey
 	Key string `json:"key"` // full key, shown only once
 }
+
+// --- Search/Sync types ---
+
+// ProductSyncRequest is the request body for pushing a single product to the registry index.
+type ProductSyncRequest struct {
+	ProductID       string     `json:"product_id"`
+	Name            string     `json:"name"`
+	Description     string     `json:"description"`
+	Category        string     `json:"category"`
+	Tags            []string   `json:"tags,omitempty"`
+	PriceRange      PriceRange `json:"price_range"`
+	VariantsSummary []string   `json:"variants_summary,omitempty"`
+	ImageURL        string     `json:"image_url,omitempty"`
+	InStock         bool       `json:"in_stock"`
+	Rating          Rating     `json:"rating"`
+	Location        Location   `json:"location"`
+}
+
+// ProductBatchSyncRequest wraps multiple products for batch sync.
+type ProductBatchSyncRequest struct {
+	Products []ProductSyncRequest `json:"products"`
+}
+
+// PriceRange represents the min/max price for a product across variants.
+type PriceRange struct {
+	Min      int64  `json:"min"`
+	Max      int64  `json:"max"`
+	Currency string `json:"currency"`
+}
+
+// Rating represents aggregated product ratings.
+type Rating struct {
+	Average float64 `json:"average"`
+	Count   int     `json:"count"`
+}
+
+// Location represents geographic information for search filtering.
+type Location struct {
+	Country string `json:"country"`
+	Region  string `json:"region"`
+}
+
+// ProductSearchResult is a single product returned from the search index.
+type ProductSearchResult struct {
+	ProductID       string     `json:"product_id"`
+	StoreID         string     `json:"store_id"`
+	StoreName       string     `json:"store_name"`
+	Name            string     `json:"name"`
+	Description     string     `json:"description"`
+	Category        string     `json:"category"`
+	Tags            []string   `json:"tags,omitempty"`
+	PriceRange      PriceRange `json:"price_range"`
+	VariantsSummary []string   `json:"variants_summary,omitempty"`
+	ImageURL        string     `json:"image_url,omitempty"`
+	InStock         bool       `json:"in_stock"`
+	Rating          Rating     `json:"rating"`
+	Location        Location   `json:"location"`
+}
+
+// SyncResponse is the response for product sync operations.
+type SyncResponse struct {
+	Indexed int         `json:"indexed"`
+	Updated int         `json:"updated"`
+	Errors  []SyncError `json:"errors,omitempty"`
+}
+
+// SyncError reports a per-product sync failure.
+type SyncError struct {
+	ProductID string `json:"product_id"`
+	Error     string `json:"error"`
+}
+
+// StoreRegistrationResponse wraps StoreEntry with the one-time registry token.
+type StoreRegistrationResponse struct {
+	StoreEntry
+	RegistryToken string `json:"registry_token"`
+}
