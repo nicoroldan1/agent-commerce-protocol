@@ -2,6 +2,7 @@ package store
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"strings"
 	"sync"
@@ -11,14 +12,16 @@ import (
 
 // MemoryStore is a thread-safe in-memory store for StoreEntry records.
 type MemoryStore struct {
-	mu      sync.RWMutex
-	entries map[string]ace.StoreEntry
+	mu          sync.RWMutex
+	entries     map[string]ace.StoreEntry
+	tokenHashes map[string]string // SHA-256 token hash -> store ID
 }
 
 // New creates a new MemoryStore.
 func New() *MemoryStore {
 	return &MemoryStore{
-		entries: make(map[string]ace.StoreEntry),
+		entries:     make(map[string]ace.StoreEntry),
+		tokenHashes: make(map[string]string),
 	}
 }
 
@@ -104,6 +107,62 @@ func (m *MemoryStore) Update(entry ace.StoreEntry) bool {
 	}
 	m.entries[entry.ID] = entry
 	return true
+}
+
+// StoreTokenHash associates a SHA-256 token hash with a store ID.
+func (m *MemoryStore) StoreTokenHash(storeID, hash string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.tokenHashes[hash] = storeID
+}
+
+// GetStoreIDByTokenHash returns the store ID associated with the given token hash.
+func (m *MemoryStore) GetStoreIDByTokenHash(hash string) (string, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	id, ok := m.tokenHashes[hash]
+	return id, ok
+}
+
+// DeleteStore removes the store entry and its associated token hash. Returns false if not found.
+func (m *MemoryStore) DeleteStore(id string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, ok := m.entries[id]; !ok {
+		return false
+	}
+	// Remove any token hash pointing to this store.
+	for hash, sid := range m.tokenHashes {
+		if sid == id {
+			delete(m.tokenHashes, hash)
+			break
+		}
+	}
+	delete(m.entries, id)
+	return true
+}
+
+// ResolveToken hashes the raw token with SHA-256, looks up the associated store ID,
+// and returns the store ID, store name, and whether the token was valid.
+func (m *MemoryStore) ResolveToken(rawToken string) (storeID, storeName string, ok bool) {
+	sum := sha256.Sum256([]byte(rawToken))
+	hash := hex.EncodeToString(sum[:])
+
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	sid, found := m.tokenHashes[hash]
+	if !found {
+		return "", "", false
+	}
+	entry, exists := m.entries[sid]
+	if !exists {
+		return "", "", false
+	}
+	return entry.ID, entry.Name, true
 }
 
 func containsStr(slice []string, val string) bool {
