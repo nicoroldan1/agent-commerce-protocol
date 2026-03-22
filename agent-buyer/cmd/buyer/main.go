@@ -15,6 +15,7 @@ func main() {
 	storeURL := flag.String("store", "", "Direct store well-known URL (skips registry)")
 	apiKey := flag.String("key", "", "ACE API key for the store")
 	provider := flag.String("provider", "stripe", "Payment provider")
+	search := flag.String("search", "", "Search products across all stores before buying")
 	flag.Parse()
 
 	fmt.Println("=== ANS Demo Agent Buyer ===")
@@ -53,6 +54,27 @@ func main() {
 		wellKnownURL = stores.Data[0].WellKnownURL
 	}
 	fmt.Println()
+
+	// Step 1.5: Search products across registry (optional)
+	if *search != "" {
+		fmt.Println("Step 1.5: Searching products across registry...")
+		fmt.Printf("  Query: %q\n", *search)
+
+		reg := client.NewRegistryClient(*registryURL)
+		results, err := reg.SearchProducts(*search, "", "")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "  Warning: search failed: %v\n", err)
+		} else if len(results) == 0 {
+			fmt.Println("  No products matched the search query.")
+		} else {
+			fmt.Printf("  Found %d product(s):\n", len(results))
+			for i, r := range results {
+				price := fmt.Sprintf("%s%d.%02d", r.PriceRange.Currency+" ", r.PriceRange.Min/100, r.PriceRange.Min%100)
+				fmt.Printf("    %d. %s - %s (store: %s)\n", i+1, r.Name, price, r.StoreName)
+			}
+		}
+		fmt.Println()
+	}
 
 	// Step 2: Connect to store via well-known URL
 	fmt.Println("Step 2: Connecting to store...")

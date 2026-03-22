@@ -62,6 +62,31 @@ func (r *RegistryClient) GetStore(id string) (*ace.StoreEntry, error) {
 	return &resp, nil
 }
 
+// SearchProducts searches for products across all stores in the registry.
+func (r *RegistryClient) SearchProducts(query, country, category string) ([]ace.ProductSearchResult, error) {
+	params := url.Values{}
+	if query != "" {
+		params.Set("q", query)
+	}
+	if country != "" {
+		params.Set("country", country)
+	}
+	if category != "" {
+		params.Set("category", category)
+	}
+
+	u := r.baseURL + "/registry/v1/search"
+	if encoded := params.Encode(); encoded != "" {
+		u += "?" + encoded
+	}
+
+	var resp ace.PaginatedResponse[ace.ProductSearchResult]
+	if err := r.doGet(u, &resp); err != nil {
+		return nil, fmt.Errorf("search products: %w", err)
+	}
+	return resp.Data, nil
+}
+
 func (r *RegistryClient) doGet(rawURL string, out any) error {
 	req, err := http.NewRequest("GET", rawURL, nil)
 	if err != nil {
