@@ -7,6 +7,7 @@ import (
 
 	"github.com/nicroldan/ans/shared/ace"
 
+	"github.com/nicroldan/ans/registry/internal/auth"
 	"github.com/nicroldan/ans/registry/internal/healthcheck"
 	"github.com/nicroldan/ans/registry/internal/store"
 )
@@ -63,7 +64,15 @@ func (h *StoreHandler) CreateStore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	created := h.store.Create(entry)
-	writeJSON(w, http.StatusCreated, created)
+
+	token := auth.GenerateToken()
+	hash := auth.HashToken(token)
+	h.store.StoreTokenHash(created.ID, hash)
+
+	writeJSON(w, http.StatusCreated, ace.StoreRegistrationResponse{
+		StoreEntry:    created,
+		RegistryToken: token,
+	})
 }
 
 // ListStores handles GET /registry/v1/stores.
