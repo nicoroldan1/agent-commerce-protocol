@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/nicroldan/ans/shared/ace"
@@ -118,7 +119,7 @@ func (e *Engine) IndexProduct(ctx context.Context, storeID, storeName string, p 
 		"in_stock":         p.InStock,
 		"rating":           p.Rating,
 		"location":         p.Location,
-		"updated_at":       "now",
+		"updated_at":       time.Now().UTC().Format(time.RFC3339),
 	}
 
 	body, err := json.Marshal(doc)
