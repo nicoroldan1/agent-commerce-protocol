@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"log"
 	"net/http"
 	"os"
@@ -25,12 +27,18 @@ func main() {
 		esURL = "http://localhost:9200"
 	}
 
+	adminToken := os.Getenv("REGISTRY_ADMIN_TOKEN")
+	if adminToken == "" {
+		b := make([]byte, 32)
+		_, _ = rand.Read(b)
+		adminToken = "adm_" + hex.EncodeToString(b)
+		os.Setenv("REGISTRY_ADMIN_TOKEN", adminToken)
+	}
+	log.Printf("Admin token: %s", adminToken)
+
 	memStore := store.New()
 
 	mux := http.NewServeMux()
-
-	storeHandler := handlers.NewStoreHandler(memStore)
-	storeHandler.RegisterRoutes(mux)
 
 	// Try to connect to Elasticsearch for search capabilities.
 	var engine *search.Engine
@@ -60,6 +68,14 @@ func main() {
 		}
 		idxCancel()
 	}
+
+	// Register store handler (pass engine as ProductDeleter, nil if ES unavailable).
+	var deleter handlers.ProductDeleter
+	if engine != nil {
+		deleter = engine
+	}
+	storeHandler := handlers.NewStoreHandler(memStore, deleter)
+	storeHandler.RegisterRoutes(mux)
 
 	if engine != nil {
 		syncHandler := handlers.NewSyncHandler(engine, memStore)

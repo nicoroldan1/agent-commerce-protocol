@@ -182,6 +182,17 @@ type StoreEntry struct {
 	RegisteredAt time.Time `json:"registered_at"`
 }
 
+// --- Content moderation types ---
+
+// StoreReport represents a report filed against a store.
+type StoreReport struct {
+	ID        string    `json:"id"`
+	StoreID   string    `json:"store_id"`
+	Reason    string    `json:"reason"`
+	Details   string    `json:"details,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // --- Common types ---
 
 // PaginatedResponse wraps a list of items with pagination metadata.

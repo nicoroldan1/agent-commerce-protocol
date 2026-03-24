@@ -15,6 +15,7 @@ type MemoryStore struct {
 	mu          sync.RWMutex
 	entries     map[string]ace.StoreEntry
 	tokenHashes map[string]string // SHA-256 token hash -> store ID
+	reports     []ace.StoreReport
 }
 
 // New creates a new MemoryStore.
@@ -143,6 +144,15 @@ func (m *MemoryStore) DeleteStore(id string) bool {
 	}
 	delete(m.entries, id)
 	return true
+}
+
+// AddReport stores a report against a store.
+func (m *MemoryStore) AddReport(report ace.StoreReport) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	report.ID = generateID()
+	m.reports = append(m.reports, report)
 }
 
 // ResolveToken hashes the raw token with SHA-256, looks up the associated store ID,
