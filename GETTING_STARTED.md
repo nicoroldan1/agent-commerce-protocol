@@ -81,6 +81,8 @@ The server starts with 7 pre-seeded products (headphones, coffee, keyboard, shoe
 | `ADMIN_TOKEN` | *(auto-generated)* | Admin API bearer token |
 | `DEMO_API_KEY` | *(auto-generated)* | Pre-seeded buyer API key |
 | `BASE_URL` | `http://localhost:8081` | Public base URL |
+| `PAYMENT_AUTH_ENABLED` | `true` | Enable payment-as-auth (agents can pay per request without API key) |
+| `PAYMENT_AUTH_PROVIDERS` | `mock` | Comma-separated list of accepted payment providers |
 
 ---
 
@@ -120,10 +122,34 @@ curl http://localhost:8081/.well-known/agent-commerce | jq .
 }
 ```
 
-**Browse the catalog:**
+**Browse the catalog (with API key):**
 ```bash
 curl http://localhost:8081/ace/v1/products \
   -H "X-ACE-Key: <YOUR_DEMO_API_KEY>" | jq .
+```
+
+**Browse the catalog (with payment-as-auth — no API key needed):**
+```bash
+curl http://localhost:8081/ace/v1/products \
+  -H "X-ACE-Payment: mock:any_token_here" | jq .
+```
+
+**See what happens with no auth:**
+```bash
+curl -i http://localhost:8081/ace/v1/products
+# HTTP 402 Payment Required
+# {"error":"Payment or API key required","code":"payment_required","pricing":{"price":0,"currency":"USD","accepted_providers":["mock"]}}
+```
+
+**Check pricing before paying:**
+```bash
+curl http://localhost:8081/ace/v1/pricing | jq .
+```
+
+All responses include pricing headers:
+```
+X-ACE-Price: 0.00
+X-ACE-Currency: USD
 ```
 
 ---

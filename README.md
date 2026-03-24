@@ -1,7 +1,7 @@
 <p align="center">
   <h1 align="center">⚡ ACE Protocol</h1>
   <p align="center"><strong>Agent Commerce Exchange</strong></p>
-  <p align="center">The open protocol for agent-native commerce — discovery, trust, and catalog for the agentic web.</p>
+  <p align="center">The open protocol for agent-native commerce — discovery, trust, catalog, and payment-as-auth for the agentic web.</p>
 </p>
 
 <p align="center">
@@ -119,15 +119,43 @@ Every ACE store exposes a machine-readable manifest. No scraping, no guessing.
   "currencies": ["USD", "EUR"],
   "payment_protocols": ["x402", "mpp"],
   "auth": { "type": "api_key", "header": "X-ACE-Key" },
+  "payment_auth": {
+    "enabled": true,
+    "header": "X-ACE-Payment",
+    "providers": ["x402", "mpp", "mock"],
+    "default_currency": "USD"
+  },
   "policies_public": {
     "returns": "30-day returns on all items"
   }
 }
 ```
 
-`payment_protocols` tells the agent which payment standards the store supports. ACE is payment-agnostic — the agent picks the protocol it knows.
+`payment_auth` tells agents they can pay per request without an API key. Just include `X-ACE-Payment: provider:token` in any request.
 
-### 2. Full Purchase Flow
+### 2. Headless Merchant Mode — Payment as Authentication
+
+ACE supports the **headless merchant** model: agents can access any endpoint by paying per request, without accounts or API keys.
+
+```bash
+# No API key needed — just pay with the request
+curl http://localhost:8081/ace/v1/products \
+  -H "X-ACE-Payment: mock:any_token"
+
+# No auth at all? Get a 402 with pricing info
+curl http://localhost:8081/ace/v1/products
+# → HTTP 402 {"pricing": {"price": 0.00, "currency": "USD", "accepted_providers": ["mock"]}}
+```
+
+Every response includes pricing headers so agents always know the cost:
+```
+X-ACE-Price: 0.00
+X-ACE-Currency: USD
+```
+
+Both modes work simultaneously — stores accept API keys (for established relationships) and payment tokens (for anonymous, per-request access). The store declares what it supports in `.well-known/agent-commerce`.
+
+### 3. Full Purchase Flow
 
 ```
 GET  /.well-known/agent-commerce      # Discover store
@@ -140,7 +168,7 @@ POST /ace/v1/orders/{id}/pay          # Initiate payment (x402 | mpp | stripe)
 GET  /ace/v1/orders/{id}/pay/status   # Poll payment status
 ```
 
-### 3. Payment Protocol Integration
+### 4. Payment Protocol Integration
 
 ACE does not define how payment works — it defines how a store *declares* what it supports and returns the right challenge for each protocol:
 
@@ -151,7 +179,7 @@ ACE does not define how payment works — it defines how a store *declares* what
 | **stripe** | Stripe | Legacy fiat | `{ "type": "stripe", "client_secret": "..." }` |
 | **mercadopago** | MercadoPago | Legacy LATAM | `{ "type": "mercadopago", "init_point": "..." }` |
 
-### 4. Trust Layer
+### 5. Trust Layer
 
 Sensitive actions require explicit policy configuration. Defaults are safe.
 
@@ -243,7 +271,8 @@ agent-commerce-protocol/
 │   ├── cmd/ace-server/     # Entry point
 │   └── internal/
 │       ├── handlers/       # Buyer API + Admin API handlers
-│       ├── middleware/      # Auth, logging
+│       ├── middleware/      # Auth (dual mode: API key + payment-as-auth)
+│       ├── payment/        # Payment validator interface + mock provider
 │       ├── policy/         # Trust layer / policy engine
 │       ├── audit/          # Immutable audit logger
 │       └── store/          # In-memory data store
@@ -251,9 +280,11 @@ agent-commerce-protocol/
 ├── registry/               # Store discovery service (Go)
 │   ├── cmd/registry/       # Entry point
 │   └── internal/
-│       ├── handlers/       # Registry API handlers
+│       ├── handlers/       # Registry API + Search + Sync handlers
+│       ├── search/         # Elasticsearch product search engine
+│       ├── auth/           # Registry token generation + validation
 │       ├── healthcheck/    # ACE endpoint health monitoring
-│       └── store/          # In-memory registry store
+│       └── store/          # In-memory registry store + token storage
 │
 ├── agent-buyer/            # Demo buyer agent (Go)
 │   ├── cmd/buyer/          # Entry point
@@ -274,10 +305,11 @@ ACE is not competing with payment protocols — it sits above them.
 | | ACE | x402 | MPP | AgentCash | ChatGPT Checkout |
 |---|:---:|:---:|:---:|:---:|:---:|
 | Store discovery | ✅ | ❌ | ❌ | ⚠️ basic | ❌ curated only |
+| Product search | ✅ | ❌ | ❌ | ❌ | ✅ |
 | Catalog browsing | ✅ | ❌ | ❌ | ❌ | ✅ |
 | Cart + orders | ✅ | ❌ | ❌ | ❌ | ✅ |
-| Payment (x402) | ✅ | ✅ | ❌ | ✅ | ❌ |
-| Payment (MPP) | ✅ | ❌ | ✅ | ❌ | ❌ |
+| Payment-as-auth | ✅ | ✅ | ✅ | ⚠️ | ❌ |
+| Per-request pricing | ✅ | ✅ | ✅ | ❌ | ❌ |
 | Trust + policies | ✅ | ❌ | ❌ | ❌ | ⚠️ |
 | Audit trail | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Open protocol | ✅ | ✅ | ✅ | ❌ | ❌ |
@@ -294,14 +326,23 @@ ACE is not competing with payment protocols — it sits above them.
 - Demo buyer agent — E2E purchase flow
 - In-memory data store
 
+### Phase 0.5 — Scalable Search + Headless Merchant ✅
+- Elasticsearch-powered product search across all stores
+- Store-to-registry product sync (push model with registry tokens)
+- Docker Compose for local development
+- **Payment-as-auth** — agents pay per request without accounts (dual mode: API key + payment token)
+- **Per-request pricing model** for API-style services
+- **Pricing headers** on all buyer API responses (X-ACE-Price, X-ACE-Currency)
+- HTTP 402 Payment Required with pricing info for unauthenticated requests
+
 ### Phase 1 — Trust + Payment Adapters 🔄
 - Production policy engine with configurable rules per store
 - Approval workflows (human-in-the-loop for sensitive actions)
 - Budget and rate limits per agent
 - PostgreSQL persistence
-- x402 payment adapter (Coinbase / Base / USDC)
-- MPP payment adapter (Tempo + Stripe)
-- Registry search filterable by `payment_protocols`
+- Real x402 payment adapter (Coinbase / Base / USDC)
+- Real MPP payment adapter (Tempo + Stripe)
+- Real Stripe payment validation
 
 ### Phase 2 — MCP Adapter (Premium)
 - MCP server wrapper: expose any ACE store as tools for Claude, GPT, Gemini
