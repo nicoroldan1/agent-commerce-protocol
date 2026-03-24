@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/nicroldan/ans/shared/ace"
@@ -26,4 +27,13 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 		Error: message,
 		Code:  code,
 	})
+}
+
+// WritePricingHeaders adds X-ACE-Price and X-ACE-Currency headers to the response.
+func WritePricingHeaders(w http.ResponseWriter, price float64, balanceRemaining *float64) {
+	w.Header().Set("X-ACE-Price", fmt.Sprintf("%.2f", price))
+	w.Header().Set("X-ACE-Currency", "USD")
+	if balanceRemaining != nil {
+		w.Header().Set("X-ACE-Balance-Remaining", fmt.Sprintf("%.2f", *balanceRemaining))
+	}
 }
