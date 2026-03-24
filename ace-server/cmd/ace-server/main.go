@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/nicroldan/ans/ace-server/internal/audit"
 	"github.com/nicroldan/ans/ace-server/internal/handlers"
 	"github.com/nicroldan/ans/ace-server/internal/middleware"
+	"github.com/nicroldan/ans/ace-server/internal/payment"
 	"github.com/nicroldan/ans/ace-server/internal/policy"
 	"github.com/nicroldan/ans/ace-server/internal/store"
 )
@@ -26,11 +28,24 @@ func main() {
 	storeName := envOrDefault("STORE_NAME", "ACE Demo Store")
 	adminToken := envOrDefault("ADMIN_TOKEN", generateSecureToken())
 	baseURL := envOrDefault("BASE_URL", fmt.Sprintf("http://localhost:%s", port))
+	paymentAuthEnabled := envOrDefault("PAYMENT_AUTH_ENABLED", "true") == "true"
+	paymentProviders := strings.Split(envOrDefault("PAYMENT_AUTH_PROVIDERS", "mock"), ",")
 
 	// Initialize stores and services
 	memStore := store.New()
 	auditLogger := audit.NewLogger(memStore)
 	policyEngine := policy.NewEngine(memStore)
+	paymentValidator := payment.NewMockValidator()
+
+	var paymentAuth *ace.PaymentAuthConfig
+	if paymentAuthEnabled {
+		paymentAuth = &ace.PaymentAuthConfig{
+			Enabled:         true,
+			Header:          "X-ACE-Payment",
+			Providers:       paymentProviders,
+			DefaultCurrency: "USD",
+		}
+	}
 
 	// Set default policies
 	memStore.SetPolicies(policy.DefaultPolicies())
@@ -39,7 +54,7 @@ func main() {
 	demoKey := seedDemoData(memStore, storeID)
 
 	// Create handlers
-	buyerHandler := handlers.NewBuyerHandler(memStore, auditLogger, storeID, storeName, baseURL)
+	buyerHandler := handlers.NewBuyerHandler(memStore, auditLogger, storeID, storeName, baseURL, paymentAuth)
 	adminHandler := handlers.NewAdminHandler(memStore, auditLogger, policyEngine, storeID)
 
 	// Build router
@@ -47,21 +62,22 @@ func main() {
 
 	// Discovery (no auth)
 	mux.HandleFunc("GET /.well-known/agent-commerce", buyerHandler.Discovery)
+	mux.HandleFunc("GET /ace/v1/pricing", buyerHandler.Pricing)
 
 	// Buyer API routes (ACE auth)
-	aceAuth := func(handler http.HandlerFunc) http.Handler {
-		return middleware.ACEAuth(memStore, http.HandlerFunc(handler))
+	dualAuth := func(handler http.HandlerFunc) http.Handler {
+		return middleware.DualAuth(memStore, paymentValidator, paymentAuthEnabled, paymentProviders, "USD", http.HandlerFunc(handler))
 	}
-	mux.Handle("GET /ace/v1/products", aceAuth(buyerHandler.ListProducts))
-	mux.Handle("GET /ace/v1/products/{id}", aceAuth(buyerHandler.GetProduct))
-	mux.Handle("POST /ace/v1/shipping/quote", aceAuth(buyerHandler.ShippingQuote))
-	mux.Handle("POST /ace/v1/cart", aceAuth(buyerHandler.CreateCart))
-	mux.Handle("POST /ace/v1/cart/{id}/items", aceAuth(buyerHandler.AddCartItem))
-	mux.Handle("GET /ace/v1/cart/{id}", aceAuth(buyerHandler.GetCart))
-	mux.Handle("POST /ace/v1/orders", aceAuth(buyerHandler.CreateOrder))
-	mux.Handle("GET /ace/v1/orders/{id}", aceAuth(buyerHandler.GetOrder))
-	mux.Handle("POST /ace/v1/orders/{id}/pay", aceAuth(buyerHandler.Pay))
-	mux.Handle("GET /ace/v1/orders/{id}/pay/status", aceAuth(buyerHandler.PaymentStatus))
+	mux.Handle("GET /ace/v1/products", dualAuth(buyerHandler.ListProducts))
+	mux.Handle("GET /ace/v1/products/{id}", dualAuth(buyerHandler.GetProduct))
+	mux.Handle("POST /ace/v1/shipping/quote", dualAuth(buyerHandler.ShippingQuote))
+	mux.Handle("POST /ace/v1/cart", dualAuth(buyerHandler.CreateCart))
+	mux.Handle("POST /ace/v1/cart/{id}/items", dualAuth(buyerHandler.AddCartItem))
+	mux.Handle("GET /ace/v1/cart/{id}", dualAuth(buyerHandler.GetCart))
+	mux.Handle("POST /ace/v1/orders", dualAuth(buyerHandler.CreateOrder))
+	mux.Handle("GET /ace/v1/orders/{id}", dualAuth(buyerHandler.GetOrder))
+	mux.Handle("POST /ace/v1/orders/{id}/pay", dualAuth(buyerHandler.Pay))
+	mux.Handle("GET /ace/v1/orders/{id}/pay/status", dualAuth(buyerHandler.PaymentStatus))
 
 	// Admin API routes (admin auth)
 	adminAuth := func(handler http.HandlerFunc) http.Handler {
@@ -103,6 +119,11 @@ func main() {
 		log.Printf("Admin token: %s", adminToken)
 		log.Printf("Demo API key: %s", demoKey)
 		log.Printf("Discovery: %s/.well-known/agent-commerce", baseURL)
+		if paymentAuthEnabled {
+			log.Printf("Payment auth: ENABLED (providers: %s)", strings.Join(paymentProviders, ", "))
+		} else {
+			log.Printf("Payment auth: DISABLED (API key only)")
+		}
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server error: %v", err)
 		}
