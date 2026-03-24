@@ -13,21 +13,23 @@ import (
 
 // BuyerHandler implements the ACE Buyer API.
 type BuyerHandler struct {
-	store   *store.MemoryStore
-	audit   *audit.Logger
-	storeID string
-	name    string
-	baseURL string
+	store       *store.MemoryStore
+	audit       *audit.Logger
+	storeID     string
+	name        string
+	baseURL     string
+	paymentAuth *ace.PaymentAuthConfig
 }
 
 // NewBuyerHandler creates a new BuyerHandler.
-func NewBuyerHandler(s *store.MemoryStore, al *audit.Logger, storeID, name, baseURL string) *BuyerHandler {
+func NewBuyerHandler(s *store.MemoryStore, al *audit.Logger, storeID, name, baseURL string, paymentAuth *ace.PaymentAuthConfig) *BuyerHandler {
 	return &BuyerHandler{
-		store:   s,
-		audit:   al,
-		storeID: storeID,
-		name:    name,
-		baseURL: baseURL,
+		store:       s,
+		audit:       al,
+		storeID:     storeID,
+		name:        name,
+		baseURL:     baseURL,
+		paymentAuth: paymentAuth,
 	}
 }
 
@@ -45,9 +47,26 @@ func (h *BuyerHandler) Discovery(w http.ResponseWriter, r *http.Request) {
 			Type:   "api_key",
 			Header: "X-ACE-Key",
 		},
-		Currencies: []string{"USD"},
+		Currencies:  []string{"USD"},
+		PaymentAuth: h.paymentAuth,
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// Pricing handles GET /ace/v1/pricing (public, no auth required)
+func (h *BuyerHandler) Pricing(w http.ResponseWriter, r *http.Request) {
+	schedule := ace.PricingSchedule{
+		DefaultCurrency: "USD",
+		Endpoints: []ace.EndpointPrice{
+			{Method: "GET", Path: "/ace/v1/products", Price: 0.00},
+			{Method: "GET", Path: "/ace/v1/products/{id}", Price: 0.00},
+			{Method: "POST", Path: "/ace/v1/cart", Price: 0.00},
+			{Method: "POST", Path: "/ace/v1/cart/{id}/items", Price: 0.00},
+			{Method: "POST", Path: "/ace/v1/orders", Price: 0.00},
+			{Method: "POST", Path: "/ace/v1/orders/{id}/pay", Price: 0.00},
+		},
+	}
+	writeJSON(w, http.StatusOK, schedule)
 }
 
 // ListProducts handles GET /ace/v1/products
@@ -69,6 +88,7 @@ func (h *BuyerHandler) ListProducts(w http.ResponseWriter, r *http.Request) {
 	actor, actorType := middleware.GetActor(r)
 	h.audit.Log(r.Context(), h.storeID, "catalog.list", actor, actorType, "products", "", nil)
 
+	WritePricingHeaders(w, 0.00, nil)
 	writeJSON(w, http.StatusOK, ace.PaginatedResponse[ace.Product]{
 		Data:   products,
 		Total:  total,
@@ -85,6 +105,7 @@ func (h *BuyerHandler) GetProduct(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "Product not found")
 		return
 	}
+	WritePricingHeaders(w, 0.00, nil)
 	writeJSON(w, http.StatusOK, p)
 }
 
@@ -118,6 +139,7 @@ func (h *BuyerHandler) ShippingQuote(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 	}
+	WritePricingHeaders(w, 0.00, nil)
 	writeJSON(w, http.StatusOK, quote)
 }
 
@@ -128,6 +150,7 @@ func (h *BuyerHandler) CreateCart(w http.ResponseWriter, r *http.Request) {
 	actor, actorType := middleware.GetActor(r)
 	h.audit.Log(r.Context(), h.storeID, "cart.create", actor, actorType, "cart", cart.ID, nil)
 
+	WritePricingHeaders(w, 0.00, nil)
 	writeJSON(w, http.StatusCreated, cart)
 }
 
@@ -150,6 +173,11 @@ func (h *BuyerHandler) AddCartItem(w http.ResponseWriter, r *http.Request) {
 	product, ok := h.store.GetProduct(req.ProductID)
 	if !ok || product.Status != "published" {
 		writeError(w, http.StatusNotFound, "product_not_found", "Product not found or not available")
+		return
+	}
+
+	if product.PricingModel == "per_request" {
+		writeError(w, http.StatusBadRequest, "invalid_pricing_model", "Per-request products cannot be added to cart")
 		return
 	}
 
@@ -201,6 +229,7 @@ func (h *BuyerHandler) AddCartItem(w http.ResponseWriter, r *http.Request) {
 		"quantity":   req.Quantity,
 	})
 
+	WritePricingHeaders(w, 0.00, nil)
 	writeJSON(w, http.StatusOK, cart)
 }
 
@@ -212,6 +241,7 @@ func (h *BuyerHandler) GetCart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "Cart not found")
 		return
 	}
+	WritePricingHeaders(w, 0.00, nil)
 	writeJSON(w, http.StatusOK, cart)
 }
 
@@ -268,6 +298,7 @@ func (h *BuyerHandler) CreateOrder(w http.ResponseWriter, r *http.Request) {
 		"total":   order.Total.Amount,
 	})
 
+	WritePricingHeaders(w, 0.00, nil)
 	writeJSON(w, http.StatusCreated, order)
 }
 
@@ -279,6 +310,7 @@ func (h *BuyerHandler) GetOrder(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "Order not found")
 		return
 	}
+	WritePricingHeaders(w, 0.00, nil)
 	writeJSON(w, http.StatusOK, order)
 }
 
@@ -330,6 +362,7 @@ func (h *BuyerHandler) Pay(w http.ResponseWriter, r *http.Request) {
 		"amount":   payment.Amount.Amount,
 	})
 
+	WritePricingHeaders(w, 0.00, nil)
 	writeJSON(w, http.StatusCreated, payment)
 }
 
@@ -341,5 +374,6 @@ func (h *BuyerHandler) PaymentStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not_found", "Payment not found for this order")
 		return
 	}
+	WritePricingHeaders(w, 0.00, nil)
 	writeJSON(w, http.StatusOK, payment)
 }
