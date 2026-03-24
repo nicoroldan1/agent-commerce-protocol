@@ -12,8 +12,9 @@ type WellKnownResponse struct {
 	ACEBaseURL     string         `json:"ace_base_url"`
 	Capabilities   []string       `json:"capabilities"`
 	Auth           AuthConfig     `json:"auth"`
-	Currencies     []string       `json:"currencies"`
-	PoliciesPublic map[string]any `json:"policies_public,omitempty"`
+	Currencies     []string           `json:"currencies"`
+	PaymentAuth    *PaymentAuthConfig `json:"payment_auth,omitempty"`
+	PoliciesPublic map[string]any     `json:"policies_public,omitempty"`
 }
 
 // AuthConfig describes the authentication method for a store.
@@ -31,8 +32,10 @@ type Product struct {
 	Description string    `json:"description"`
 	Price       Money     `json:"price"`
 	Variants    []Variant `json:"variants,omitempty"`
-	Status      string    `json:"status"` // draft, published, unpublished
-	CreatedAt   time.Time `json:"created_at"`
+	Status          string    `json:"status"` // draft, published, unpublished
+	PricingModel    string    `json:"pricing_model,omitempty"`
+	PricePerRequest float64   `json:"price_per_request,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
@@ -330,4 +333,42 @@ type SyncError struct {
 type StoreRegistrationResponse struct {
 	StoreEntry
 	RegistryToken string `json:"registry_token"`
+}
+
+// --- Payment/Pricing types ---
+
+// PaymentAuthConfig describes payment-as-auth capabilities for a store.
+type PaymentAuthConfig struct {
+	Enabled         bool     `json:"enabled"`
+	Header          string   `json:"header"`
+	Providers       []string `json:"providers"`
+	DefaultCurrency string   `json:"default_currency"`
+}
+
+// PaymentRequiredResponse is returned with HTTP 402 when payment is needed.
+type PaymentRequiredResponse struct {
+	Error   string      `json:"error"`
+	Code    string      `json:"code"`
+	Pricing PricingInfo `json:"pricing"`
+}
+
+// PricingInfo describes the cost and accepted payment methods for an endpoint.
+type PricingInfo struct {
+	Price             float64  `json:"price"`
+	Currency          string   `json:"currency"`
+	AcceptedProviders []string `json:"accepted_providers"`
+	DetailsURL        string   `json:"details_url,omitempty"`
+}
+
+// PricingSchedule is the response for GET /ace/v1/pricing.
+type PricingSchedule struct {
+	DefaultCurrency string          `json:"default_currency"`
+	Endpoints       []EndpointPrice `json:"endpoints"`
+}
+
+// EndpointPrice describes the cost of a single API endpoint.
+type EndpointPrice struct {
+	Method string  `json:"method"`
+	Path   string  `json:"path"`
+	Price  float64 `json:"price"`
 }
