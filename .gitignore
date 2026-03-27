@@ -7,6 +7,9 @@ agent-buyer/buyer
 *.so
 *.dylib
 
+# Node
+node_modules/
+
 # Go
 vendor/
 *.test
