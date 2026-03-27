@@ -293,6 +293,12 @@ agent-commerce-protocol/
 ├── shared/                 # Common types (Go module)
 │   └── ace/types.go
 │
+├── mcp-buyer/              # MCP server for buyer agents (TypeScript)
+│   └── src/                # 13 MCP tools: discovery, catalog, purchase
+│
+├── ace-connect/            # Platform connectors (TypeScript)
+│   └── src/                # Shopify adapter + embedded ACE server
+│
 └── go.work                 # Go workspace
 ```
 
@@ -344,11 +350,18 @@ ACE is not competing with payment protocols — it sits above them.
 - Real MPP payment adapter (Tempo + Stripe)
 - Real Stripe payment validation
 
-### Phase 2 — MCP Adapter (Premium)
-- MCP server wrapper: expose any ACE store as tools for Claude, GPT, Gemini
-- Agents can "connect" to a store natively with no custom code
+### Phase 2 — MCP Adapter ✅
+- **ACE Buyer MCP** — 13 MCP tools for Claude/GPT to discover, browse, and purchase
+- Dual mode: single-store (direct URL) or registry (discovery across all stores)
+- TypeScript, published as `ace-buyer-mcp` for `npx` usage
 
-### Phase 3 — ANS Cloud (Managed Platform)
+### Phase 3 — Platform Connectors ✅
+- **ACE Connect** — connect existing e-commerce stores to ACE with one command
+- Adapter pattern: Shopify first, architecture ready for Tiendanube, WooCommerce, CSV
+- `npx ace-connect shopify --shop mystore.myshopify.com --token shp_xxx`
+- Embeds ACE server, auto-registers in registry, periodic sync
+
+### Phase 4 — ANS Cloud (Managed Platform)
 - Hosted ACE endpoints — sellers with no infrastructure
 - Managed registry with verification and reputation scoring
 - Analytics dashboard
