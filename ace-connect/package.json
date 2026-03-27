@@ -1,0 +1,22 @@
+{
+  "name": "ace-connect",
+  "version": "0.1.0",
+  "description": "Connect any e-commerce platform to the ACE Protocol with one command",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "ace-connect": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "Apache-2.0"
+}
