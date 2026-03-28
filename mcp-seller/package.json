@@ -1,0 +1,19 @@
+{
+  "name": "ace-seller-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for ACE Protocol store owners — manage catalog, orders, policies, and API keys",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": { "ace-seller-mcp": "dist/index.js" },
+  "scripts": { "build": "tsc", "start": "node dist/index.js" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "@types/node": "^22.0.0"
+  },
+  "engines": { "node": ">=18.0.0" },
+  "license": "Apache-2.0"
+}
