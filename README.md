@@ -296,6 +296,9 @@ agent-commerce-protocol/
 ├── mcp-buyer/              # MCP server for buyer agents (TypeScript)
 │   └── src/                # 13 MCP tools: discovery, catalog, purchase
 │
+├── mcp-seller/             # MCP server for store owners (TypeScript)
+│   └── src/                # 23 MCP tools: catalog, orders, policies, security, registry
+│
 ├── ace-connect/            # Platform connectors (TypeScript)
 │   └── src/                # Shopify adapter + embedded ACE server
 │
